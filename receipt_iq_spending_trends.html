@@ -1,0 +1,386 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); color: var(--color-text-primary); }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab {
+    padding: 6px 14px; border-radius: var(--border-radius-md); font-size: 13px;
+    cursor: pointer; border: 0.5px solid var(--color-border-secondary);
+    color: var(--color-text-secondary); background: transparent; transition: all .15s;
+  }
+  .tab.active { background: var(--color-background-secondary); color: var(--color-text-primary); border-color: var(--color-border-primary); }
+  .tab:hover:not(.active) { border-color: var(--color-border-primary); color: var(--color-text-primary); }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 14px; }
+  .metric-label { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; }
+  .metric-value { font-size: 22px; font-weight: 500; }
+  .metric-sub { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; }
+
+  .chart-section { margin-bottom: 24px; }
+  .chart-title { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 10px; font-weight: 500; }
+  .chart-wrap { position: relative; width: 100%; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; font-size: 12px; color: var(--color-text-secondary); }
+  .legend-item { display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 3px 8px; border-radius: var(--border-radius-md); transition: background .15s; }
+  .legend-item:hover { background: var(--color-background-secondary); }
+  .legend-item.muted { opacity: .4; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+  .period-row { display: flex; gap: 6px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+  .period-row label { font-size: 12px; color: var(--color-text-secondary); margin-right: 4px; }
+  .pchip {
+    padding: 4px 11px; border-radius: 20px; font-size: 12px;
+    cursor: pointer; border: 0.5px solid var(--color-border-secondary);
+    color: var(--color-text-secondary); background: transparent; transition: all .15s;
+  }
+  .pchip.active { background: var(--color-background-secondary); color: var(--color-text-primary); border-color: var(--color-border-primary); }
+
+  .ask-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 16px; padding: 7px 14px; border-radius: var(--border-radius-md);
+    border: 0.5px solid var(--color-border-secondary); font-size: 13px;
+    cursor: pointer; background: transparent; color: var(--color-text-secondary);
+    transition: all .15s;
+  }
+  .ask-btn:hover { border-color: var(--color-border-primary); color: var(--color-text-primary); background: var(--color-background-secondary); }
+
+  @media (max-width: 480px) {
+    .metrics { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+
+<div style="padding: 1rem 0;">
+
+<div class="tabs">
+  <button class="tab active" onclick="setTab('trends', this)">Daily trend</button>
+  <button class="tab" onclick="setTab('category', this)">By category</button>
+  <button class="tab" onclick="setTab('weekly', this)">Weekly</button>
+  <button class="tab" onclick="setTab('compare', this)">Cat. compare</button>
+</div>
+
+<div class="period-row">
+  <label>Period:</label>
+  <button class="pchip active" onclick="setPeriod('week', this)">7 days</button>
+  <button class="pchip" onclick="setPeriod('month', this)">30 days</button>
+  <button class="pchip" onclick="setPeriod('all', this)">All time</button>
+</div>
+
+<div class="metrics" id="metrics"></div>
+
+<div class="legend" id="legend"></div>
+
+<div class="chart-section">
+  <div class="chart-title" id="chart-title"></div>
+  <div class="chart-wrap" id="chart-wrap">
+    <canvas id="mainChart"></canvas>
+  </div>
+</div>
+
+<button class="ask-btn" onclick="sendPrompt('Based on my spending trends, where should I cut back?')">Ask Claude to analyze my trends ↗</button>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const CAT_COLORS = {
+  Groceries:    '#7DC228',
+  Dining:       '#E05A38',
+  Auto:         '#4A7AE8',
+  Furniture:    '#D4922A',
+  Electronics:  '#8B70E8',
+  Pharmacy:     '#2AB87A',
+  Clothing:     '#D45A9A',
+  Entertainment:'#E05070',
+  Travel:       '#28A8D8',
+  Utilities:    '#D4A820',
+  Other:        '#7A8090',
+};
+
+let receipts = [];
+try { receipts = JSON.parse(localStorage.getItem('receipts_iq') || '[]'); } catch(e) {}
+
+let currentTab = 'trends';
+let currentPeriod = 'week';
+let hiddenCats = new Set();
+let chartInst = null;
+
+function setTab(t, el) {
+  currentTab = t;
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderAll();
+}
+
+function setPeriod(p, el) {
+  currentPeriod = p;
+  document.querySelectorAll('.pchip').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderAll();
+}
+
+function filtered() {
+  const now = new Date();
+  return receipts.filter(r => {
+    const d = new Date(r.date);
+    if (currentPeriod === 'week') { const s = new Date(now); s.setDate(now.getDate()-7); return d >= s; }
+    if (currentPeriod === 'month') { const s = new Date(now); s.setDate(now.getDate()-30); return d >= s; }
+    return true;
+  });
+}
+
+function fmtCur(n) { return '$' + n.toFixed(2); }
+function fmtShort(n) { return '$' + Math.round(n); }
+
+function renderMetrics(rs) {
+  const total = rs.reduce((s,r) => s+r.total, 0);
+  const avg = rs.length ? total/rs.length : 0;
+  const bycat = {};
+  rs.forEach(r => { bycat[r.category] = (bycat[r.category]||0)+r.total; });
+  const topCat = Object.entries(bycat).sort((a,b)=>b[1]-a[1])[0];
+  const byDay = {};
+  rs.forEach(r => { byDay[r.date] = (byDay[r.date]||0)+r.total; });
+  const busiest = Object.entries(byDay).sort((a,b)=>b[1]-a[1])[0];
+
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric">
+      <div class="metric-label">Total spent</div>
+      <div class="metric-value">${fmtShort(total)}</div>
+      <div class="metric-sub">${rs.length} receipts</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Avg per receipt</div>
+      <div class="metric-value">${fmtShort(avg)}</div>
+      <div class="metric-sub">across all stores</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Top category</div>
+      <div class="metric-value" style="font-size:16px">${topCat ? topCat[0] : '—'}</div>
+      <div class="metric-sub">${topCat ? fmtCur(topCat[1]) : 'no data'}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Busiest day</div>
+      <div class="metric-value" style="font-size:15px">${busiest ? new Date(busiest[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—'}</div>
+      <div class="metric-sub">${busiest ? fmtCur(busiest[1]) : ''}</div>
+    </div>
+  `;
+}
+
+function renderLegend(cats) {
+  document.getElementById('legend').innerHTML = cats.map(c => `
+    <div class="legend-item ${hiddenCats.has(c)?'muted':''}" onclick="toggleCat('${c}')">
+      <div class="legend-dot" style="background:${CAT_COLORS[c]||'#888'}"></div>
+      ${c}
+    </div>`).join('');
+}
+
+function toggleCat(c) {
+  hiddenCats.has(c) ? hiddenCats.delete(c) : hiddenCats.add(c);
+  renderAll();
+}
+
+function destroyChart() {
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+}
+
+function getDates(rs, n) {
+  const dates = [];
+  const now = new Date();
+  for (let i = n-1; i >= 0; i--) {
+    const d = new Date(now); d.setDate(now.getDate()-i);
+    dates.push(d.toISOString().split('T')[0]);
+  }
+  return dates;
+}
+
+function renderTrends(rs) {
+  const n = currentPeriod === 'week' ? 7 : currentPeriod === 'month' ? 30 : 60;
+  const dates = getDates(rs.length ? rs : [], n);
+  const dayTotals = {};
+  rs.forEach(r => { dayTotals[r.date] = (dayTotals[r.date]||0)+r.total; });
+  const data = dates.map(d => +(dayTotals[d]||0).toFixed(2));
+
+  document.getElementById('chart-title').textContent = 'Daily spend';
+  document.getElementById('legend').innerHTML = '';
+  const wrap = document.getElementById('chart-wrap');
+  wrap.style.height = '220px';
+
+  destroyChart();
+  chartInst = new Chart(document.getElementById('mainChart'), {
+    type: 'line',
+    data: {
+      labels: dates.map(d => new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+      datasets: [{
+        label: 'Spent',
+        data,
+        borderColor: '#4A7AE8',
+        backgroundColor: 'rgba(74,122,232,0.1)',
+        borderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.35,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' $' + ctx.parsed.y.toFixed(2) } } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8, color: '#888', font: { size: 11 } }, grid: { color: 'rgba(128,128,128,.1)' } },
+        y: { beginAtZero: true, ticks: { color: '#888', font: { size: 11 }, callback: v => '$'+v }, grid: { color: 'rgba(128,128,128,.1)' } }
+      }
+    }
+  });
+}
+
+function renderCategory(rs) {
+  const bycat = {};
+  rs.forEach(r => { bycat[r.category] = (bycat[r.category]||0)+r.total; });
+  const sorted = Object.entries(bycat).sort((a,b)=>b[1]-a[1]).filter(([c]) => !hiddenCats.has(c));
+  const cats = Object.keys(bycat);
+
+  document.getElementById('chart-title').textContent = 'Spend by category';
+  renderLegend(cats);
+
+  const wrap = document.getElementById('chart-wrap');
+  wrap.style.height = Math.max(200, sorted.length * 44 + 60) + 'px';
+
+  destroyChart();
+  chartInst = new Chart(document.getElementById('mainChart'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(([c]) => c),
+      datasets: [{
+        label: 'Spent',
+        data: sorted.map(([,v]) => +v.toFixed(2)),
+        backgroundColor: sorted.map(([c]) => CAT_COLORS[c]||'#888'),
+        borderRadius: 5,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' $'+ctx.parsed.x.toFixed(2) } } },
+      scales: {
+        x: { beginAtZero: true, ticks: { color: '#888', font: { size: 11 }, callback: v => '$'+v }, grid: { color: 'rgba(128,128,128,.1)' } },
+        y: { ticks: { color: '#888', font: { size: 12 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderWeekly(rs) {
+  const weeks = {};
+  rs.forEach(r => {
+    const d = new Date(r.date);
+    const start = new Date(d); start.setDate(d.getDate() - d.getDay());
+    const key = start.toISOString().split('T')[0];
+    weeks[key] = (weeks[key]||0)+r.total;
+  });
+  const sorted = Object.entries(weeks).sort((a,b)=>a[0].localeCompare(b[0]));
+
+  document.getElementById('chart-title').textContent = 'Weekly totals';
+  document.getElementById('legend').innerHTML = '';
+  const wrap = document.getElementById('chart-wrap');
+  wrap.style.height = '220px';
+
+  destroyChart();
+  chartInst = new Chart(document.getElementById('mainChart'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(([d]) => 'Wk of ' + new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+      datasets: [{
+        label: 'Weekly spend',
+        data: sorted.map(([,v]) => +v.toFixed(2)),
+        backgroundColor: '#4A7AE8',
+        borderRadius: 5,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' $'+ctx.parsed.y.toFixed(2) } } },
+      scales: {
+        x: { ticks: { color: '#888', font: { size: 11 }, autoSkip: false, maxRotation: 30 }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: '#888', font: { size: 11 }, callback: v => '$'+v }, grid: { color: 'rgba(128,128,128,.1)' } }
+      }
+    }
+  });
+}
+
+function renderCompare(rs) {
+  const allDates = [...new Set(rs.map(r => r.date))].sort();
+  const allCats = [...new Set(rs.map(r => r.category))].filter(c => !hiddenCats.has(c));
+
+  const n = currentPeriod === 'week' ? 7 : currentPeriod === 'month' ? 30 : Math.max(allDates.length, 7);
+  const dates = getDates(rs, n);
+
+  const catDayTotals = {};
+  allCats.forEach(c => { catDayTotals[c] = {}; });
+  rs.forEach(r => {
+    if (!hiddenCats.has(r.category)) {
+      catDayTotals[r.category] = catDayTotals[r.category]||{};
+      catDayTotals[r.category][r.date] = (catDayTotals[r.category][r.date]||0)+r.total;
+    }
+  });
+
+  document.getElementById('chart-title').textContent = 'Category comparison over time';
+  renderLegend([...new Set(rs.map(r => r.category))]);
+
+  const wrap = document.getElementById('chart-wrap');
+  wrap.style.height = '260px';
+
+  destroyChart();
+  chartInst = new Chart(document.getElementById('mainChart'), {
+    type: 'line',
+    data: {
+      labels: dates.map(d => new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+      datasets: allCats.map(c => ({
+        label: c,
+        data: dates.map(d => +(catDayTotals[c]?.[d]||0).toFixed(2)),
+        borderColor: CAT_COLORS[c]||'#888',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        pointRadius: 3,
+        tension: 0.3,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => ` ${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}` } } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8, color: '#888', font: { size: 11 } }, grid: { color: 'rgba(128,128,128,.1)' } },
+        y: { beginAtZero: true, ticks: { color: '#888', font: { size: 11 }, callback: v => '$'+v }, grid: { color: 'rgba(128,128,128,.1)' } }
+      }
+    }
+  });
+}
+
+function renderAll() {
+  const rs = filtered();
+  renderMetrics(rs);
+
+  if (!rs.length) {
+    destroyChart();
+    document.getElementById('legend').innerHTML = '';
+    document.getElementById('chart-title').textContent = '';
+    const wrap = document.getElementById('chart-wrap');
+    wrap.style.height = '120px';
+    wrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:120px;font-size:14px;color:var(--color-text-tertiary)">No receipts for this period — scan one to see trends</div>';
+    return;
+  }
+
+  if (!document.getElementById('mainChart')) {
+    document.getElementById('chart-wrap').innerHTML = '<canvas id="mainChart"></canvas>';
+  }
+
+  if (currentTab === 'trends') renderTrends(rs);
+  else if (currentTab === 'category') renderCategory(rs);
+  else if (currentTab === 'weekly') renderWeekly(rs);
+  else if (currentTab === 'compare') renderCompare(rs);
+}
+
+renderAll();
+</script>

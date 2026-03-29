@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ReceiptIQ</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0f11;
+    --surface: #16181c;
+    --surface2: #1e2128;
+    --border: #2a2d35;
+    --accent: #c8f135;
+    --accent2: #ff6b4a;
+    --accent3: #5b8dff;
+    --text: #f0f0ee;
+    --muted: #7a7f8e;
+    --radius: 14px;
+    --font-display: 'DM Serif Display', serif;
+    --font-body: 'Instrument Sans', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── LAYOUT ── */
+  .app { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 28px 0;
+    position: fixed;
+    height: 100vh;
+    overflow-y: auto;
+    z-index: 50;
+    transition: transform .3s ease;
+  }
+
+  .main { margin-left: 240px; flex: 1; padding: 32px; max-width: 1200px; }
+
+  /* ── SIDEBAR ── */
+  .logo { padding: 0 24px 28px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .logo-mark { font-family: var(--font-display); font-size: 22px; letter-spacing: -.5px; }
+  .logo-mark span { color: var(--accent); }
+  .logo-sub { font-size: 11px; color: var(--muted); font-family: var(--font-mono); margin-top: 2px; letter-spacing: .5px; }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 24px; cursor: pointer; font-size: 14px; font-weight: 500;
+    color: var(--muted); transition: all .2s; border-left: 2px solid transparent;
+  }
+  .nav-item:hover { color: var(--text); background: var(--surface2); }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(200,241,53,.06); }
+  .nav-icon { font-size: 18px; width: 22px; text-align: center; }
+
+  .nav-section { padding: 20px 24px 8px; font-size: 10px; font-family: var(--font-mono); color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
+
+  .sidebar-footer { margin-top: auto; padding: 16px 24px 0; border-top: 1px solid var(--border); }
+  .period-toggle { display: flex; gap: 4px; background: var(--bg); border-radius: 8px; padding: 3px; }
+  .period-btn { flex: 1; padding: 6px; text-align: center; font-size: 12px; font-family: var(--font-mono); cursor: pointer; border-radius: 6px; transition: all .2s; color: var(--muted); }
+  .period-btn.active { background: var(--surface2); color: var(--accent); }
+
+  /* ── HEADER ── */
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; gap: 16px; flex-wrap: wrap; }
+  .page-title { font-family: var(--font-display); font-size: clamp(28px, 4vw, 40px); line-height: 1.1; }
+  .page-title em { font-style: italic; color: var(--accent); }
+  .page-sub { color: var(--muted); font-size: 14px; margin-top: 6px; }
+
+  /* ── UPLOAD AREA ── */
+  .upload-card {
+    border: 1.5px dashed var(--border); border-radius: var(--radius);
+    background: var(--surface); padding: 40px 24px; text-align: center;
+    cursor: pointer; transition: all .3s; position: relative; overflow: hidden;
+    margin-bottom: 32px;
+  }
+  .upload-card::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(200,241,53,.06) 0%, transparent 70%);
+    opacity: 0; transition: opacity .3s;
+  }
+  .upload-card:hover { border-color: var(--accent); }
+  .upload-card:hover::before { opacity: 1; }
+  .upload-card.dragging { border-color: var(--accent); background: rgba(200,241,53,.05); }
+
+  .upload-icon { font-size: 42px; margin-bottom: 12px; }
+  .upload-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .upload-sub { font-size: 13px; color: var(--muted); }
+  .upload-sub strong { color: var(--accent); }
+
+  .upload-input { display: none; }
+
+  .scan-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent); color: #0e0f11; border: none; border-radius: 10px;
+    padding: 12px 24px; font-size: 14px; font-weight: 700; cursor: pointer;
+    font-family: var(--font-body); margin-top: 16px; transition: all .2s;
+    letter-spacing: .2px;
+  }
+  .scan-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(200,241,53,.25); }
+  .scan-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* ── STATS ROW ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; position: relative; overflow: hidden; }
+  .stat-card::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--accent-bar, var(--accent)); border-radius: 2px 2px 0 0; }
+  .stat-label { font-size: 11px; font-family: var(--font-mono); color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .stat-value { font-family: var(--font-display); font-size: 30px; line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* ── SECTION ── */
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .section-title { font-size: 14px; font-weight: 600; letter-spacing: .3px; }
+  .section-actions { display: flex; gap: 8px; }
+
+  .chip {
+    padding: 5px 12px; border-radius: 20px; font-size: 12px; font-family: var(--font-mono);
+    cursor: pointer; border: 1px solid var(--border); color: var(--muted); background: var(--surface);
+    transition: all .2s;
+  }
+  .chip:hover, .chip.active { border-color: var(--accent); color: var(--accent); background: rgba(200,241,53,.08); }
+
+  /* ── CATEGORIES GRID ── */
+  .categories-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 32px; }
+
+  .cat-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 16px; cursor: pointer; transition: all .2s; position: relative;
+  }
+  .cat-card:hover { border-color: var(--border2, #3a3d45); transform: translateY(-2px); }
+  .cat-card.selected { border-color: var(--cat-color); background: color-mix(in srgb, var(--cat-color) 8%, var(--surface)); }
+  .cat-emoji { font-size: 26px; margin-bottom: 10px; }
+  .cat-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .cat-amount { font-family: var(--font-mono); font-size: 18px; font-weight: 500; }
+  .cat-count { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .cat-bar { height: 2px; border-radius: 2px; margin-top: 12px; background: var(--border); overflow: hidden; }
+  .cat-bar-fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+
+  /* ── RECEIPTS LIST ── */
+  .receipts-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .receipt-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; display: flex; align-items: center; gap: 16px;
+    cursor: pointer; transition: all .2s;
+  }
+  .receipt-card:hover { border-color: #3a3d45; background: var(--surface2); }
+  .receipt-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .receipt-info { flex: 1; min-width: 0; }
+  .receipt-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .receipt-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .receipt-cat { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-family: var(--font-mono); margin-top: 5px; }
+  .receipt-amount { font-family: var(--font-display); font-size: 20px; text-align: right; }
+  .receipt-date { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7); backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+    opacity: 0; pointer-events: none; transition: opacity .3s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+    width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto;
+    transform: translateY(20px); transition: transform .3s;
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal-header { padding: 24px 28px 0; display: flex; justify-content: space-between; align-items: center; }
+  .modal-title { font-family: var(--font-display); font-size: 22px; }
+  .modal-close { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all .2s; }
+  .modal-close:hover { color: var(--text); border-color: #3a3d45; }
+  .modal-body { padding: 20px 28px 28px; }
+
+  .item-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .item-row:last-child { border-bottom: none; }
+  .item-name { color: var(--text); }
+  .item-price { font-family: var(--font-mono); color: var(--accent); }
+
+  .modal-total { display: flex; justify-content: space-between; align-items: center; padding: 16px 0 0; margin-top: 8px; border-top: 2px solid var(--accent); }
+  .modal-total-label { font-weight: 700; font-size: 15px; }
+  .modal-total-val { font-family: var(--font-display); font-size: 28px; color: var(--accent); }
+
+  /* ── LOADING ── */
+  .loading-state { text-align: center; padding: 40px 20px; }
+  .spinner { width: 40px; height: 40px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: var(--muted); font-size: 14px; }
+  .loading-text strong { color: var(--accent); display: block; font-size: 16px; margin-bottom: 6px; }
+
+  /* ── EMPTY ── */
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: .5; }
+  .empty-text { font-size: 15px; }
+
+  /* ── HAMBURGER ── */
+  .hamburger { display: none; position: fixed; top: 16px; left: 16px; z-index: 200; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 40px; height: 40px; align-items: center; justify-content: center; cursor: pointer; flex-direction: column; gap: 5px; padding: 0; }
+  .hamburger span { display: block; width: 18px; height: 2px; background: var(--text); border-radius: 2px; transition: all .3s; }
+
+  .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 40; }
+
+  /* ── PREVIEW IMAGE ── */
+  .preview-img { width: 100%; border-radius: 10px; margin-bottom: 16px; max-height: 280px; object-fit: cover; }
+
+  /* ── TOAST ── */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface2); border: 1px solid var(--accent); border-radius: 12px; padding: 14px 20px; font-size: 14px; z-index: 300; transform: translateY(80px); opacity: 0; transition: all .3s; max-width: 320px; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast-title { font-weight: 600; color: var(--accent); margin-bottom: 3px; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .sidebar { transform: translateX(-100%); }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-backdrop { display: block; opacity: 0; pointer-events: none; transition: opacity .3s; }
+    .sidebar-backdrop.open { opacity: 1; pointer-events: all; }
+    .hamburger { display: flex; }
+    .main { margin-left: 0; padding: 72px 16px 24px; }
+    .categories-grid { grid-template-columns: repeat(2, 1fr); }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .receipt-card { flex-wrap: wrap; }
+    .receipt-amount { width: 100%; text-align: left; }
+    .modal { max-width: 100%; border-radius: 16px; }
+  }
+
+  @media (max-width: 400px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    .categories-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <button class="hamburger" id="hamburger" onclick="toggleSidebar()">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="sidebar-backdrop" id="backdrop" onclick="toggleSidebar()"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">
+      <div class="logo-mark">Receipt<span>IQ</span></div>
+      <div class="logo-sub">AI Expense Tracker</div>
+    </div>
+
+    <div class="nav-section">Dashboards</div>
+    <div class="nav-item active" onclick="setView('dashboard')"><span class="nav-icon">◈</span> Overview</div>
+    <div class="nav-item" onclick="setView('receipts')"><span class="nav-icon">◧</span> Receipts</div>
+    <div class="nav-item" onclick="setView('categories')"><span class="nav-icon">◫</span> Categories</div>
+
+    <div class="nav-section">Sort By</div>
+    <div class="nav-item" id="sort-amount" onclick="setSortBy('amount')"><span class="nav-icon">↓</span> Highest Spend</div>
+    <div class="nav-item" id="sort-date" onclick="setSortBy('date')"><span class="nav-icon">↓</span> Most Recent</div>
+    <div class="nav-item" id="sort-name" onclick="setSortBy('name')"><span class="nav-icon">↓</span> Name A–Z</div>
+
+    <div class="sidebar-footer">
+      <div style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-bottom:8px;letter-spacing:1px;">TIME PERIOD</div>
+      <div class="period-toggle">
+        <div class="period-btn active" onclick="setPeriod('week', this)">Week</div>
+        <div class="period-btn" onclick="setPeriod('month', this)">Month</div>
+        <div class="period-btn" onclick="setPeriod('all', this)">All</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main" id="main-content">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Your <em>Expenses</em></div>
+        <div class="page-sub" id="period-label">This week's spending at a glance</div>
+      </div>
+      <label for="file-input" style="cursor:pointer;">
+        <div class="scan-btn">📷 Scan Receipt</div>
+      </label>
+    </div>
+
+    <!-- Upload area -->
+    <div class="upload-card" id="drop-zone">
+      <input type="file" id="file-input" class="upload-input" accept="image/*" onchange="handleFile(event)" />
+      <div class="upload-icon">🧾</div>
+      <div class="upload-title">Drop a receipt photo here</div>
+      <div class="upload-sub">or <strong>click to browse</strong> — AI will read & categorize it instantly</div>
+      <label for="file-input"><div class="scan-btn" style="margin:0 auto;">📷 Choose Photo</div></label>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" id="stats-grid"></div>
+
+    <!-- Category + receipts section (toggled by view) -->
+    <div id="content-area"></div>
+  </main>
+</div>
+
+<!-- Receipt detail modal -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Receipt Detail</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <div class="toast-title" id="toast-title"></div>
+  <div id="toast-body"></div>
+</div>
+
+<script>
+// ── STATE ──
+const CATS = {
+  Groceries:   { emoji: '🛒', color: '#c8f135' },
+  Dining:      { emoji: '🍽️', color: '#ff6b4a' },
+  Auto:        { emoji: '🚗', color: '#5b8dff' },
+  Furniture:   { emoji: '🛋️', color: '#f5a623' },
+  Electronics: { emoji: '💻', color: '#a78bfa' },
+  Pharmacy:    { emoji: '💊', color: '#34d399' },
+  Clothing:    { emoji: '👕', color: '#f472b6' },
+  Entertainment:{ emoji: '🎬', color: '#fb7185' },
+  Travel:      { emoji: '✈️', color: '#38bdf8' },
+  Utilities:   { emoji: '⚡', color: '#fbbf24' },
+  Other:       { emoji: '📦', color: '#94a3b8' },
+};
+
+let receipts = JSON.parse(localStorage.getItem('receipts_iq') || '[]');
+let currentView = 'dashboard';
+let sortBy = 'date';
+let period = 'week';
+let selectedCats = [];
+
+function save() { localStorage.setItem('receipts_iq', JSON.stringify(receipts)); }
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('backdrop').classList.toggle('open');
+}
+
+function setView(v) {
+  currentView = v;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  event?.target?.closest('.nav-item')?.classList.add('active');
+  render();
+}
+
+function setSortBy(s) {
+  sortBy = s;
+  document.querySelectorAll('[id^="sort-"]').forEach(el => el.classList.remove('active'));
+  document.getElementById('sort-' + s)?.classList.add('active');
+  render();
+}
+
+function setPeriod(p, el) {
+  period = p;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  const labels = { week: "This week's spending", month: "This month's spending", all: "All-time spending" };
+  document.getElementById('period-label').textContent = labels[p] + ' at a glance';
+  render();
+}
+
+// ── FILTER BY PERIOD ──
+function filteredReceipts() {
+  const now = new Date();
+  return receipts.filter(r => {
+    if (period === 'all') return true;
+    const d = new Date(r.date);
+    if (period === 'week') {
+      const start = new Date(now); start.setDate(now.getDate() - 7);
+      return d >= start;
+    }
+    if (period === 'month') {
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }
+    return true;
+  });
+}
+
+// ── HANDLE FILE ──
+async function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    const base64 = ev.target.result.split(',')[1];
+    const previewUrl = ev.target.result;
+    await scanReceipt(base64, previewUrl, file.name);
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── DROP ZONE ──
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragging'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragging'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragging');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      await scanReceipt(ev.target.result.split(',')[1], ev.target.result, file.name);
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
+// ── AI SCAN ──
+async function scanReceipt(base64, previewUrl, filename) {
+  showLoading(true);
+
+  try {
+    const prompt = `You are a receipt parser. Analyze this receipt image carefully.
+
+Return ONLY valid JSON in this exact format, no other text:
+{
+  "store": "Store or restaurant name",
+  "category": "One of: Groceries, Dining, Auto, Furniture, Electronics, Pharmacy, Clothing, Entertainment, Travel, Utilities, Other",
+  "date": "YYYY-MM-DD (use today if not visible: ${new Date().toISOString().split('T')[0]})",
+  "items": [
+    {"name": "Item name", "price": 0.00}
+  ],
+  "subtotal": 0.00,
+  "tax": 0.00,
+  "total": 0.00
+}
+
+Rules:
+- category must exactly match one of the listed options
+- All prices as numbers (no $ signs)
+- If total is not clear, sum the items
+- Include all line items you can read`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const raw = data.content?.find(c => c.type === 'text')?.text || '';
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    const receipt = {
+      id: Date.now(),
+      store: parsed.store || 'Unknown Store',
+      category: CATS[parsed.category] ? parsed.category : 'Other',
+      date: parsed.date || new Date().toISOString().split('T')[0],
+      items: parsed.items || [],
+      subtotal: parsed.subtotal || 0,
+      tax: parsed.tax || 0,
+      total: parsed.total || 0,
+      previewUrl,
+    };
+
+    receipts.unshift(receipt);
+    save();
+    showLoading(false);
+    render();
+    showToast('Receipt scanned!', `${receipt.store} · $${receipt.total.toFixed(2)} · ${receipt.category}`);
+
+  } catch (err) {
+    showLoading(false);
+    showToast('Scan failed', 'Could not read receipt. Try a clearer photo.');
+    console.error(err);
+  }
+}
+
+function showLoading(on) {
+  const area = document.getElementById('content-area');
+  if (on) {
+    area.innerHTML = `
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <div class="loading-text">
+          <strong>AI is reading your receipt…</strong>
+          Identifying items & categorizing spend
+        </div>
+      </div>`;
+  }
+}
+
+// ── RENDER ──
+function render() {
+  renderStats();
+  renderContent();
+}
+
+function renderStats() {
+  const rs = filteredReceipts();
+  const total = rs.reduce((s, r) => s + r.total, 0);
+  const bycat = {};
+  rs.forEach(r => { bycat[r.category] = (bycat[r.category] || 0) + r.total; });
+  const topCat = Object.entries(bycat).sort((a, b) => b[1] - a[1])[0];
+  const avg = rs.length ? total / rs.length : 0;
+
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card" style="--accent-bar:${CATS['Groceries'].color}">
+      <div class="stat-label">Total Spent</div>
+      <div class="stat-value">$${total.toFixed(0)}</div>
+      <div class="stat-sub">${rs.length} receipt${rs.length !== 1 ? 's' : ''} scanned</div>
+    </div>
+    <div class="stat-card" style="--accent-bar:${CATS['Dining'].color}">
+      <div class="stat-label">Top Category</div>
+      <div class="stat-value">${topCat ? CATS[topCat[0]].emoji : '—'}</div>
+      <div class="stat-sub">${topCat ? topCat[0] + ' · $' + topCat[1].toFixed(0) : 'No data yet'}</div>
+    </div>
+    <div class="stat-card" style="--accent-bar:${CATS['Electronics'].color}">
+      <div class="stat-label">Avg Receipt</div>
+      <div class="stat-value">$${avg.toFixed(0)}</div>
+      <div class="stat-sub">per transaction</div>
+    </div>
+    <div class="stat-card" style="--accent-bar:${CATS['Travel'].color}">
+      <div class="stat-label">Categories</div>
+      <div class="stat-value">${Object.keys(bycat).length}</div>
+      <div class="stat-sub">unique spending areas</div>
+    </div>
+  `;
+}
+
+function renderContent() {
+  const rs = filteredReceipts();
+  const area = document.getElementById('content-area');
+
+  if (currentView === 'categories') {
+    area.innerHTML = renderCategoriesHTML(rs);
+    return;
+  }
+  if (currentView === 'receipts') {
+    area.innerHTML = renderReceiptsHTML(rs);
+    return;
+  }
+
+  // Dashboard: categories + receipts
+  area.innerHTML = renderCategoriesHTML(rs) + renderReceiptsHTML(rs);
+}
+
+function catTotals(rs) {
+  const bycat = {};
+  rs.forEach(r => {
+    if (!bycat[r.category]) bycat[r.category] = { total: 0, count: 0 };
+    bycat[r.category].total += r.total;
+    bycat[r.category].count++;
+  });
+  return bycat;
+}
+
+function renderCategoriesHTML(rs) {
+  const bycat = catTotals(rs);
+  const grandTotal = rs.reduce((s, r) => s + r.total, 0);
+  const sorted = Object.entries(bycat).sort((a, b) => b[1].total - a[1].total);
+
+  if (!sorted.length) return `<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-text">No categories yet.<br>Scan your first receipt!</div></div>`;
+
+  const cards = sorted.map(([cat, data]) => {
+    const pct = grandTotal ? (data.total / grandTotal * 100) : 0;
+    const info = CATS[cat] || CATS.Other;
+    const sel = selectedCats.includes(cat) ? 'selected' : '';
+    return `
+    <div class="cat-card ${sel}" style="--cat-color:${info.color}" onclick="toggleCat('${cat}')">
+      <div class="cat-emoji">${info.emoji}</div>
+      <div class="cat-name">${cat}</div>
+      <div class="cat-amount" style="color:${info.color}">$${data.total.toFixed(2)}</div>
+      <div class="cat-count">${data.count} receipt${data.count !== 1 ? 's' : ''}</div>
+      <div class="cat-bar"><div class="cat-bar-fill" style="width:${pct}%;background:${info.color}"></div></div>
+    </div>`;
+  }).join('');
+
+  const selTotal = selectedCats.length
+    ? selectedCats.reduce((s, c) => s + (bycat[c]?.total || 0), 0)
+    : null;
+
+  const selBanner = selTotal !== null ? `
+    <div style="background:rgba(200,241,53,.08);border:1px solid var(--accent);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;">
+      <span style="color:var(--muted)">Selected total (${selectedCats.join(', ')})</span>
+      <span style="font-family:var(--font-display);font-size:22px;color:var(--accent)">$${selTotal.toFixed(2)}</span>
+    </div>` : '';
+
+  return `
+    <div class="section-header">
+      <div class="section-title">Categories ${selectedCats.length ? '· '+selectedCats.length+' selected' : ''}</div>
+      ${selectedCats.length ? `<div class="chip active" onclick="clearCats()">✕ Clear</div>` : ''}
+    </div>
+    ${selBanner}
+    <div class="categories-grid">${cards}</div>
+  `;
+}
+
+function renderReceiptsHTML(rs) {
+  let data = [...rs];
+  if (selectedCats.length) data = data.filter(r => selectedCats.includes(r.category));
+
+  if (sortBy === 'amount') data.sort((a, b) => b.total - a.total);
+  else if (sortBy === 'date') data.sort((a, b) => new Date(b.date) - new Date(a.date));
+  else if (sortBy === 'name') data.sort((a, b) => a.store.localeCompare(b.store));
+
+  if (!data.length) return `<div class="empty-state"><div class="empty-icon">🧾</div><div class="empty-text">No receipts${selectedCats.length ? ' for selected categories' : ''}.<br>Scan one to get started!</div></div>`;
+
+  const items = data.map(r => {
+    const info = CATS[r.category] || CATS.Other;
+    const d = new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `
+    <div class="receipt-card" onclick="openReceipt(${r.id})">
+      <div class="receipt-icon" style="background:color-mix(in srgb,${info.color} 15%,var(--surface2))">${info.emoji}</div>
+      <div class="receipt-info">
+        <div class="receipt-name">${r.store}</div>
+        <div class="receipt-meta">${d}</div>
+        <span class="receipt-cat" style="background:color-mix(in srgb,${info.color} 12%,transparent);color:${info.color}">${r.category}</span>
+      </div>
+      <div>
+        <div class="receipt-amount">$${r.total.toFixed(2)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="section-header" style="margin-top:8px">
+      <div class="section-title">Receipts (${data.length})</div>
+    </div>
+    <div class="receipts-list">${items}</div>
+  `;
+}
+
+function toggleCat(cat) {
+  if (selectedCats.includes(cat)) selectedCats = selectedCats.filter(c => c !== cat);
+  else selectedCats.push(cat);
+  render();
+}
+
+function clearCats() { selectedCats = []; render(); }
+
+function openReceipt(id) {
+  const r = receipts.find(x => x.id === id);
+  if (!r) return;
+  const info = CATS[r.category] || CATS.Other;
+  const d = new Date(r.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  document.getElementById('modal-title').textContent = r.store;
+  document.getElementById('modal-body').innerHTML = `
+    ${r.previewUrl ? `<img src="${r.previewUrl}" class="preview-img" />` : ''}
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+      <span class="receipt-cat" style="background:color-mix(in srgb,${info.color} 12%,transparent);color:${info.color};padding:4px 12px;border-radius:6px;font-size:13px;">${info.emoji} ${r.category}</span>
+      <span style="font-size:13px;color:var(--muted);font-family:var(--font-mono)">${d}</span>
+    </div>
+    <div>
+      ${r.items.map(it => `
+        <div class="item-row">
+          <span class="item-name">${it.name}</span>
+          <span class="item-price">$${Number(it.price).toFixed(2)}</span>
+        </div>`).join('')}
+    </div>
+    ${r.tax ? `<div style="display:flex;justify-content:space-between;padding:10px 0;color:var(--muted);font-size:13px;border-top:1px solid var(--border);margin-top:4px;"><span>Tax</span><span style="font-family:var(--font-mono)">$${r.tax.toFixed(2)}</span></div>` : ''}
+    <div class="modal-total">
+      <span class="modal-total-label">Total</span>
+      <span class="modal-total-val">$${r.total.toFixed(2)}</span>
+    </div>
+    <button onclick="deleteReceipt(${r.id})" style="margin-top:20px;width:100%;background:none;border:1px solid #3a2020;color:#ff6b6b;border-radius:8px;padding:10px;font-size:13px;cursor:pointer;font-family:var(--font-body);transition:all .2s;" onmouseover="this.style.background='rgba(255,107,107,.1)'" onmouseout="this.style.background='none'">🗑 Delete Receipt</button>
+  `;
+  document.getElementById('modal').classList.add('open');
+}
+
+function deleteReceipt(id) {
+  receipts = receipts.filter(r => r.id !== id);
+  save(); closeModal(); render();
+  showToast('Receipt deleted', '');
+}
+
+function closeModal(e) {
+  if (!e || e.target === e.currentTarget) document.getElementById('modal').classList.remove('open');
+}
+
+function showToast(title, body) {
+  const t = document.getElementById('toast');
+  document.getElementById('toast-title').textContent = title;
+  document.getElementById('toast-body').textContent = body;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ── SEED DATA (demo) ──
+function seedDemo() {
+  if (receipts.length) return;
+  const today = new Date();
+  const d = (offset) => { const x = new Date(today); x.setDate(x.getDate() - offset); return x.toISOString().split('T')[0]; };
+  receipts = [
+    { id: 1, store: "Whole Foods Market", category: "Groceries", date: d(1), items: [{name:"Organic Salad",price:6.99},{name:"Almond Milk",price:4.49},{name:"Salmon Fillet",price:14.99},{name:"Greek Yogurt",price:3.79}], subtotal: 30.26, tax: 2.42, total: 32.68, previewUrl: null },
+    { id: 2, store: "Olive Garden", category: "Dining", date: d(2), items: [{name:"Fettuccine Alfredo",price:17.99},{name:"Breadsticks",price:0},{name:"Tiramisu",price:7.49},{name:"Soft Drink",price:3.49}], subtotal: 28.97, tax: 2.32, total: 31.29, previewUrl: null },
+    { id: 3, store: "Shell Gas Station", category: "Auto", date: d(3), items: [{name:"Regular Unleaded 12.4 gal",price:47.12}], subtotal: 47.12, tax: 0, total: 47.12, previewUrl: null },
+    { id: 4, store: "CVS Pharmacy", category: "Pharmacy", date: d(4), items: [{name:"Vitamin C 500mg",price:9.99},{name:"Ibuprofen 200mg",price:7.49},{name:"Hand Sanitizer",price:3.99}], subtotal: 21.47, tax: 1.72, total: 23.19, previewUrl: null },
+    { id: 5, store: "Target", category: "Clothing", date: d(5), items: [{name:"Graphic Tee",price:14.99},{name:"Shorts",price:22.99},{name:"Socks 6-Pack",price:9.99}], subtotal: 47.97, tax: 3.84, total: 51.81, previewUrl: null },
+  ];
+  save();
+}
+
+seedDemo();
+render();
+</script>
+</body>
+</html>

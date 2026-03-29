@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ReceiptIQ — Trends & Charts</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+</head>
+<body>
+<div class="app">
+
+  <button class="hamburger" id="hamburger" onclick="toggleSidebar()">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="sidebar-backdrop" id="backdrop" onclick="toggleSidebar()"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">
+        <div class="logo-mark">Receipt<span>IQ</span></div>
+        <div class="logo-sub">Expense Tracker</div>
+        <div class="logo-sub"> powered by AI </div>
+    </div>
+
+    <div class="nav-section">Dashboards</div>
+    <div class="nav-item" onclick="window.location.href='index.html'"><span class="nav-icon">◈</span> Overview</div>
+    <div class="nav-item" onclick="window.location.href='index.html'"><span class="nav-icon">◧</span> Receipts</div>
+    <div class="nav-item" onclick="window.location.href='index.html'"><span class="nav-icon">◫</span> Categories</div>
+    <div class="nav-item active"><span class="nav-icon">◻</span> Trends &amp; Charts</div>
+
+    <div class="sidebar-footer">
+      <div class="period-label-small">TIME PERIOD</div>
+      <div class="period-toggle">
+        <div class="period-btn active" onclick="setPeriod('week', this)">Week</div>
+        <div class="period-btn" onclick="setPeriod('month', this)">Month</div>
+        <div class="period-btn" onclick="setPeriod('all', this)">All</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Spending <em>Trends</em></div>
+        <div class="page-sub">Visualize where your money goes</div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" id="stats-grid"></div>
+
+    <!-- Chart tabs -->
+    <div class="chart-tabs" id="chart-tabs">
+      <button class="chart-tab active" onclick="setTab('trends', this)">Daily Trend</button>
+      <button class="chart-tab" onclick="setTab('category', this)">By Category</button>
+      <button class="chart-tab" onclick="setTab('weekly', this)">Weekly</button>
+      <button class="chart-tab" onclick="setTab('compare', this)">Compare</button>
+    </div>
+
+    <!-- Legend -->
+    <div class="chart-legend" id="chart-legend"></div>
+
+    <!-- Chart area -->
+    <div class="chart-card">
+      <div class="chart-card-title" id="chart-card-title"></div>
+      <div class="chart-container" id="chart-container">
+        <canvas id="mainChart"></canvas>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="charts.js"></script>
+</body>
+</html>
