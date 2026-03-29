@@ -1,0 +1,104 @@
+<!-- 
+Author: Monty McCoy
+Date: 2024-06-15
+Description:
+  ReceipTracker — AI Expense Tracker
+  A modern web app for tracking expenses by uploading receipt photos. 
+  Built with HTML, CSS, and JavaScript, featuring a sidebar navigation, dynamic content area, and AI-powered receipt parsing.
+-->
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReceipTracker - Expense Tracker powered by AI</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+
+    <!-- Mobile hamburger -->
+    <button class="hamburger" id="hamburger" onclick="toggleSidebar()">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="sidebar-backdrop" id="backdrop" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="logo">
+        <div class="logo-mark">Receipt<span>IQ</span></div>
+        <div class="logo-sub">Expense Tracker</div>
+        <div class="logo-sub"> powered by AI </div>
+      </div>
+
+      <div class="nav-section">Dashboards</div>
+      <div class="nav-item active" onclick="setView('dashboard', this)"><span class="nav-icon">◈</span> Overview</div>
+      <div class="nav-item" onclick="setView('receipts', this)"><span class="nav-icon">◧</span> Receipts</div>
+      <div class="nav-item" onclick="setView('categories', this)"><span class="nav-icon">◫</span> Categories</div>
+      <div class="nav-item" onclick="window.location.href='charts.html'"><span class="nav-icon">◻</span> Trends &amp; Charts</div>
+
+      <div class="nav-section">Sort By</div>
+      <div class="nav-item" id="sort-amount" onclick="setSortBy('amount')"><span class="nav-icon">↓</span> Highest Spend</div>
+      <div class="nav-item" id="sort-date" onclick="setSortBy('date')"><span class="nav-icon">↓</span> Most Recent</div>
+      <div class="nav-item" id="sort-name" onclick="setSortBy('name')"><span class="nav-icon">↓</span> Name A–Z</div>
+
+      <div class="sidebar-footer">
+        <div class="period-label-small">TIME PERIOD</div>
+        <div class="period-toggle">
+          <div class="period-btn active" onclick="setPeriod('week', this)">Week</div>
+          <div class="period-btn" onclick="setPeriod('month', this)">Month</div>
+          <div class="period-btn" onclick="setPeriod('all', this)">All</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Your <em>Expenses</em></div>
+          <div class="page-sub" id="period-label">This week's spending at a glance</div>
+        </div>
+        <label for="file-input" style="cursor:pointer;">
+          <div class="scan-btn">📷 Scan Receipt</div>
+        </label>
+      </div>
+
+      <!-- Upload / drop zone -->
+      <div class="upload-card" id="drop-zone">
+        <input type="file" id="file-input" class="upload-input" accept="image/*" onchange="handleFile(event)" />
+        <div class="upload-icon">🧾</div>
+        <div class="upload-title">Drop a receipt photo here</div>
+        <div class="upload-sub">or <strong>click to browse</strong> — AI will read &amp; categorize it instantly</div>
+        <label for="file-input"><div class="scan-btn" style="margin:0 auto;">📷 Choose Photo</div></label>
+      </div>
+
+      <!-- Stats row -->
+      <div class="stats-grid" id="stats-grid"></div>
+
+      <!-- Dynamic content area -->
+      <div id="content-area"></div>
+    </main>
+  </div>
+
+  <!-- Receipt detail modal -->
+  <div class="modal-overlay" id="modal" onclick="closeModal(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-title">Receipt Detail</div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast">
+    <div class="toast-title" id="toast-title"></div>
+    <div id="toast-body"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
